@@ -3,225 +3,265 @@
 > **Bachelor Thesis · Ban Handy · December 2007**
 >
 > A complete, trainable neural network face detection system
-> built entirely from scratch in pure Java — with a full Swing GUI,
-> multi-scale sliding window scanner, backpropagation training
-> engine, and Javadoc HTML documentation.
+> built entirely from scratch in pure Java. Includes a full Swing GUI,
+> multi-scale sliding window scanner, backpropagation training engine,
+> Javadoc HTML documentation, and training + test image datasets.
 >
-> No OpenCV. No external libraries. Just Java standard library and math.
+> **No OpenCV. No external libraries. No frameworks.**
+> Just the Java standard library and the mathematics of neural networks,
+> implemented line by line.
+
+---
+
+## 🚀 Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/banhandy/java-face-detection-2007.git
+cd java-face-detection-2007
+
+# Compile all source files
+javac *.java
+
+# Launch the application
+java FdApp
+```
+
+Training images and test images are included in the `train set/`
+and `test set/` folders — the app is ready to train and scan
+immediately after cloning.
 
 ---
 
 ## 📄 Documentation
 
-This project includes **Javadoc-generated HTML documentation**
-(`/docs/index.html`) produced in January 2008.
+Full **Javadoc HTML documentation** is included in the `/doc` folder,
+generated on **January 22, 2008**.
 
-The source code comments are written in **Bahasa Indonesia**
-(the original thesis language). The generated Javadoc HTML
-renders in English using standard Javadoc formatting —
-class names, method signatures, parameter tables, and
-return value descriptions are all fully readable.
+```bash
+# Browse documentation locally
+open doc/index.html
+```
 
-To browse the docs locally:
-```
-open docs/index.html
-```
+Source comments are written in **Bahasa Indonesia** (the original
+thesis language). The Javadoc HTML renders in English — all class
+names, method signatures, parameter tables, and return descriptions
+are fully readable in the generated docs.
 
 ---
 
-## 🧠 What This Is — And Why It Matters
+## 🧠 What This Is
 
 This is **not** a skin-tone filter or a rule-based detector.
 
-The core of this system is a **trained Multi-Layer Perceptron (MLP)
-neural network** that classifies 18×27 pixel image windows
-as either *face* or *non-face*. The network is trained using
-**backpropagation with momentum**, run against a dataset of
-face and non-face images that you prepare yourself.
+The core classifier is a **trained Multi-Layer Perceptron (MLP)
+neural network** that decides whether any given 18×27 pixel window
+in an image contains a face or not. The network is trained from
+scratch using **backpropagation with momentum** on a dataset of
+face and non-face image patches.
 
-This places the project firmly in the category of
-**machine learning-based computer vision** — the same
-fundamental approach that underlies modern deep learning
-face detectors, implemented entirely by hand in 2007.
+This is **machine learning-based computer vision** — the same
+fundamental approach that underlies modern deep learning face
+detectors — implemented entirely by hand in December 2007,
+five years before AlexNet changed the field.
 
 ---
 
-## 🏗️ System Architecture
+## 🏗️ Architecture
+
+The system is built as a clean **object-oriented layered architecture**,
+from the lowest-level neuron up to the full GUI application:
+
+```
+┌─────────────────────────────────────────────────────┐
+│  FdApp.java          — Swing GUI application         │
+│    uses ↓                                            │
+│  FaceDetector.java   — Detection & training engine   │
+│    uses ↓            uses ↓                          │
+│  ImageFilter.java    MyMlp.java  — Neural network    │
+│                        uses ↓                        │
+│                      Weight.java — Weight management │
+│                        uses ↓                        │
+│                      Neuron.java — Single neuron     │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📁 File Reference
+
+### `Neuron.java` — The Building Block
+The lowest-level component. Represents a single artificial neuron:
+- Stores the neuron's output value
+- Applies the **sigmoid activation function**: `f(x) = 1 / (1 + e^-x)`
+- Holds the delta value used during backpropagation weight updates
+
+---
+
+### `Weight.java` — Connection Weights
+Manages the weighted connections between neurons in adjacent layers:
+- Stores the current weight value for each connection
+- Stores the **previous weight delta** for momentum calculation
+  during backpropagation
+- Enables the momentum term: `Δw(t) = α·δ·input + m·Δw(t-1)`
+
+---
+
+### `MyMlp.java` — The Neural Network
+Assembles neurons and weights into a working **Multi-Layer Perceptron**:
+- `IncrementalTrain(alpha, input[], target, momentum)` —
+  performs one forward pass + backpropagation weight update
+  for a single training sample
+- `simmulate(input[])` — forward pass only, returns network output
+- `sumSquaredError(inputs[][], targets[])` —
+  computes total SSE across the entire training set
+- `saveWeight(path)` / `loadWeight(path)` —
+  serializes and restores all network weights to/from a `.dat` file
+
+---
+
+### `ImageFilter.java` — Image Preprocessing
+Handles all pixel-level image operations:
+- Extracts 18×27 pixel windows at specified coordinates
+- Scales images to target dimensions for multi-level detection
+- `mirrorX()` — horizontal mirror for training data augmentation
+- `getProcWindow()` — returns the window as a flattened
+  400-element `double[]` array ready for network input
+
+---
 
 ### `FaceDetector.java` — The Core Engine
+The main reusable component. Designed to be embedded in any
+Java application that needs face detection capability.
 
-The main component. A reusable Java class designed to be
-embedded in other applications.
-
-**Neural Network:**
-- Wraps a custom `MyMlp` (Multi-Layer Perceptron) implementation
-- Trained via **incremental backpropagation** with configurable:
+**Neural network management:**
+- Wraps `MyMlp` with configurable training parameters:
   - Learning rate `alpha` (default: `0.1`)
   - Momentum `m` (default: `0.7`)
   - Error tolerance `errToleran` (default: `0.05`)
-- Training stops automatically when **Sum Squared Error** drops
-  below the tolerance threshold
-- Positive samples (face patches) → target output `0.9`
-- Negative samples (non-face patches) → target output `-0.9`
+- Training continues until **Sum Squared Error** drops below tolerance
 
-**Input Normalization:**
-Each 18×27 pixel window is flattened to a **400-dimensional
-feature vector** and normalized using pre-computed mean and
-standard deviation arrays:
+**Input normalization:**
+Each 18×27 pixel window is flattened to a **400-feature vector**
+and normalized using pre-computed mean and standard deviation arrays:
 
 ```java
 normalized[i] = (pixel[i] - mean[i]) / std[i]
 ```
 
-These 400-element `mean[]` and `std[]` arrays embedded in the
-source were computed from the original training dataset.
-This is equivalent to what modern frameworks call
-`transforms.Normalize(mean, std)`.
+These 400-element `mean[]` and `std[]` arrays were computed from
+the original training dataset and embedded directly in the source.
+This is identical in concept to `transforms.Normalize(mean, std)`
+in modern PyTorch.
 
-**Multi-Scale Sliding Window Detection:**
+**Multi-scale sliding window scanning:**
 ```
-For scale level 0 to N:
-  Resize image by (scaleFactor × level)
-  Slide an 18×27 window across the image (step = 2px)
-  Normalize each window's 400 pixel features
-  Pass through trained MLP
-  If output > threshold → record bounding box
-  Scale bounding box back to original image coordinates
+For each scale level 0 → N:
+  1. Resize image by (scaleFactor × level)
+  2. Slide an 18×27 window across every 2 pixels
+  3. Normalize the 400-pixel feature vector
+  4. Pass through the trained MLP
+  5. If output > threshold → record as detected face
+  6. Scale bounding box back to original image coordinates
 ```
 
-**Data Augmentation:**
-When building the training set, every face image is automatically
-mirrored horizontally — doubling the positive training examples.
-This is still standard practice in 2025.
-
-**Weight Persistence:**
-Trained network weights can be saved to and loaded from `.dat`
-files, allowing the trained model to be reused without retraining.
+**Training set creation:**
+- Loads face images (`s1.jpg` … `sN.jpg`) → target output `0.9`
+- Loads non-face images, extracts random patches → target output `-0.9`
+- Automatically mirrors all face images horizontally
+  (doubles positive training samples — data augmentation)
 
 **Threading:**
 Both training and scanning run in dedicated `Thread` instances,
-keeping the UI responsive during long operations.
+keeping the GUI responsive during long operations.
 
 ---
 
 ### `FdApp.java` — The Desktop Application
+A complete Java Swing GUI that drives the entire system.
 
-A complete Java Swing GUI for interacting with the detector.
+**Training Panel** — configure and run neural network training:
+- Learning rate, momentum, error tolerance fields
+- Start Training / Stop Training buttons
+- Real-time **Sum Squared Error** display during training
 
-**Training Panel:**
-- Configure learning rate, momentum, error tolerance
-- Start / Stop training
-- Real-time Sum Squared Error display
+**Scan Panel** — run face detection on loaded images:
+- Scale levels, scale factor, threshold fields
+- Scan button triggers multi-scale detection
+- Detected faces shown as **blue bounding rectangles**
+  drawn directly onto the image display
 
-**Scan Panel:**
-- Configure scale levels, scale factor, detection threshold
-- Trigger scan on loaded image
-- Detected faces shown as **blue bounding rectangles** drawn
-  directly on the image using `Graphics.drawRect()`
+**Create Set Panel** — build training datasets:
+- Specify training image folder, face image count,
+  non-face image count, patches per non-face image
+- Loads, preprocesses, and normalizes all images into
+  the training matrix
 
-**Create Set Panel:**
-- Specify training image folder
-- Set number of face images, non-face images, and patches per image
-- Loads and preprocesses the full training dataset
-
-**System Panel:**
-- Save trained weights to file
-- Load previously saved weights
-
----
-
-### `ImageFilter.java` — Image Preprocessing
-
-Handles pixel-level image operations:
-- Extracts 18×27 pixel windows from images at given coordinates
-- Scales images to target dimensions for multi-level scanning
-- `mirrorX()` — horizontal mirror for training data augmentation
-- `getProcWindow()` — returns flattened 400-element pixel array
+**System Panel** — weight persistence:
+- **Save Weight** — serialize trained network to `.dat` file
+- **Load Weight** — restore a previously trained network
 
 ---
 
-### `MyMlp.java` — Neural Network Implementation
-
-The backpropagation MLP implementation:
-- `IncrementalTrain(alpha, input[], target, momentum)` — single sample weight update
-- `simmulate(input[])` — forward pass, returns network output
-- `sumSquaredError(inputs[][], targets[])` — computes total training error
-- `saveWeight(path)` / `loadWeight(path)` — weight serialization
-
----
-
-## 🖥️ How to Run
-
-### Requirements
-```
-Java JDK 1.4 or higher
-(Originally built with JDK 1.4 — compatible with all modern JDKs)
-Pure standard library — no external dependencies
-```
-
-### Compile all files
-```bash
-javac FdApp.java FaceDetector.java ImageFilter.java MyMlp.java
-```
-
-### Launch the application
-```bash
-java FdApp
-```
-
----
-
-## 🔄 Typical Workflow
-
-### Option A — Use Pre-trained Weights
-1. Launch the app
-2. **System panel** → Click **Load Weight** → select a `.dat` file
-3. **Create Set panel** → Click **Load Image** → select a photo
-4. **Scan panel** → adjust Threshold, Scale Level, Scale Factor
-5. Click **Scan** → blue rectangles appear on detected faces
-
-### Option B — Train on Your Own Dataset
-Prepare a folder with this structure:
-```
-train set/
-├── s1.jpg        ← face image 1
-├── s2.jpg        ← face image 2
-├── ...
-├── sN.jpg        ← face image N
-├── 1.jpg         ← non-face image 1
-├── 2.jpg         ← non-face image 2
-└── ...
-```
-
-Then in the app:
-1. **Create Set panel** → set folder path, face count, non-face count
-2. Click **Create Train Set** — loads and normalizes all images
-3. **Training panel** → set learning rate, momentum, error tolerance
-4. Click **Start Training** — watch SSE decrease in real time
-5. Click **Stop Training** when SSE is acceptably low
-6. **System panel** → **Save Weight** — save your trained model
-7. Load an image and **Scan**
-
----
-
-## 📁 Repository Structure
+## 📂 Repository Contents
 
 ```
 java-face-detection-2007/
 │
-├── FaceDetector.java       ← Core detection engine (main component)
-├── FdApp.java              ← Swing GUI application
-├── ImageFilter.java        ← Image preprocessing & window extraction
-├── MyMlp.java              ← MLP neural network with backpropagation
+├── Neuron.java            ← Single neuron implementation
+├── Weight.java            ← Neural connection weight management
+├── MyMlp.java             ← Multi-layer perceptron network
+├── ImageFilter.java       ← Image preprocessing & window extraction
+├── FaceDetector.java      ← Core face detection engine
+├── FdApp.java             ← Swing GUI application
 │
-├── docs/
-│   ├── index.html          ← Javadoc frameset entry point (Jan 2008)
-│   ├── FaceDetector.html   ← FaceDetector class documentation
-│   ├── FdApp.html          ← FdApp class documentation
-│   └── allclasses-frame.html
+├── doc/                   ← Javadoc HTML documentation (Jan 2008)
+│   ├── index.html         ← Entry point (frameset)
+│   ├── FaceDetector.html  ← FaceDetector class docs
+│   ├── FdApp.html         ← FdApp class docs
+│   └── ...
+│
+├── train set/             ← Training image dataset
+│   ├── s1.jpg … sN.jpg    ← Face images
+│   └── 1.jpg … M.jpg      ← Non-face images
+│
+├── test set/              ← Test images for scanning
+│   └── *.jpg
 │
 └── README.md
 ```
+
+---
+
+## 🔄 Usage Workflow
+
+### Scan with Pre-Trained Weights
+
+1. Launch: `java FdApp`
+2. **System** → **Load Weight** → select a `.dat` file
+3. **Create Set** → **Load Image** → select any `.jpg`
+4. **Scan** → set Threshold, Scale Level, Scale Factor
+5. Click **Scan** — blue rectangles mark detected faces
+
+### Train on the Included Dataset
+
+1. Launch: `java FdApp`
+2. **Create Set** → set folder to `train set`, set counts
+3. Click **Create Train Set** — loads and normalizes all images
+4. **Training** → set learning rate, momentum, error tolerance
+5. Click **Start Training** — watch Sum Squared Error decrease
+6. Click **Stop Training** when SSE reaches acceptable level
+7. **System** → **Save Weight** — save your trained model
+
+### Train on Your Own Dataset
+
+Prepare a folder with:
+```
+your-folder/
+├── s1.jpg, s2.jpg, ... sN.jpg   ← face image crops (18×27 or larger)
+└── 1.jpg, 2.jpg, ... M.jpg      ← non-face scene images
+```
+Then follow the same steps above using your folder path.
 
 ---
 
@@ -229,44 +269,44 @@ java-face-detection-2007/
 
 | Year | Event |
 |------|-------|
-| 2001 | Viola-Jones face detection paper published (Haar Cascades) |
-| 2006 | OpenCV 1.0 released — Java bindings immature and limited |
-| **Dec 2007** | **This project completed** |
-| Jan 2008 | Javadoc HTML documentation generated |
-| 2009 | OpenCV 2.0 — better Java support arrives |
+| 2001 | Viola-Jones Haar Cascade paper published |
+| 2006 | OpenCV 1.0 — Java bindings immature |
+| **Dec 2007** | **This project completed as bachelor thesis** |
+| **Jan 2008** | **Javadoc HTML documentation generated** |
+| 2009 | OpenCV 2.0 — better Java support |
 | 2012 | AlexNet — deep learning transforms computer vision |
-| 2015 | Google Vision API — cloud face detection as a service |
-| 2017 | MTCNN — accurate multi-task CNN face detection |
-| 2024 | MediaPipe — real-time on-device detection on mobile |
+| 2015 | Google Vision API — cloud face detection |
+| 2017 | MTCNN — modern CNN-based face detection |
+| 2024 | MediaPipe — real-time on-device detection |
 
-In late 2007, a Java developer wanting to do face detection had
-essentially one option: implement it from scratch.
-OpenCV's Java bindings were not production-ready.
-Deep learning did not exist in practical form.
-Cloud APIs were a decade away.
+In December 2007, a Java developer wanting face detection had
+essentially one path: implement every component from scratch.
+No practical ML framework existed for Java. No pretrained models
+to download. No `model.fit()`.
 
-This project demonstrates what that implementation looked like.
+This repository is what that looked like — a complete,
+working implementation from neuron to GUI.
 
 ---
 
-## 🔗 Mapping to Modern ML Concepts
+## 🔗 Concepts vs. Modern Equivalents
 
-Every concept implemented manually here is now abstracted
-by modern frameworks:
+Every idea implemented manually here is now a one-line API call:
 
 | This Project (2007) | Modern Equivalent |
 |---|---|
+| `Neuron.java` sigmoid activation | `nn.Sigmoid()` |
+| `Weight.java` delta storage | `tensor.grad` |
 | `MyMlp.IncrementalTrain()` | `optimizer.step()` |
 | `myNet.sumSquaredError()` | `nn.MSELoss()` |
-| `mean[]` / `std[]` arrays | `transforms.Normalize(mean, std)` |
-| Multi-scale image resizing | Feature Pyramid Network (FPN) |
-| Sliding window + threshold | Anchor boxes + Non-Maximum Suppression |
-| `saveWeight()` / `loadWeight()` | `torch.save()` / `torch.load()` |
+| `mean[]` / `std[]` embedded arrays | `transforms.Normalize(mean, std)` |
+| Multi-scale image pyramid | Feature Pyramid Network (FPN) |
+| Sliding window + threshold | Anchor boxes + NMS |
 | `mirrorX()` augmentation | `transforms.RandomHorizontalFlip()` |
-| Binary face/non-face output | Binary classification head |
-| Thread-based async training | Background training worker |
+| `saveWeight()` / `loadWeight()` | `torch.save()` / `torch.load()` |
+| Threaded training loop | Background `DataLoader` worker |
 
-The abstractions are different. The mathematics is identical.
+The abstractions changed. The mathematics did not.
 
 ---
 
@@ -277,26 +317,26 @@ The abstractions are different. The mathematics is identical.
 | **Author** | Ban Handy |
 | **Institution** | Bunda Mulia University |
 | **Degree** | Sarjana Komputer (S.Kom) — Bachelor of Computer Science |
-| **Year Completed** | 2007 |
-| **Docs Generated** | January 22, 2008 (Javadoc timestamp) |
+| **Completed** | December 2007 |
+| **Docs Generated** | January 22, 2008 |
 | **Source Language** | Bahasa Indonesia |
-| **Documentation** | English (Javadoc HTML) |
+| **Documentation** | English (standard Javadoc HTML output) |
 
 ---
 
-## 👤 Author
+## 👤 About the Author
 
-**Ban Handy** — Full-stack developer based in Surabaya, Indonesia.
-Building software continuously since 2007 across medical technology,
-industrial ERP, fintech, mobile apps, e-commerce, and financial
-automation.
+**Ban Handy** — Full-stack developer and software engineer
+based in Surabaya, Indonesia. Building software continuously
+since 2007 across medical technology, industrial ERP, fintech,
+mobile apps, e-commerce, and financial automation.
 
 | | |
 |---|---|
-| 🌐 | [banhandy.vercel.app](https://banhandy.vercel.app) |
-| 📧 | banhandy@gmail.com |
-| 📈 | [MQL5 Marketplace](https://www.mql5.com/en/users/HandyBan) |
-| 💼 | [github.com/banhandy](https://github.com/banhandy) |
+| 🌐 Website | [banhandy.vercel.app](https://banhandy.vercel.app) |
+| 📧 Email | banhandy@gmail.com |
+| 📈 MQL5 | [mql5.com/en/users/HandyBan](https://www.mql5.com/en/users/HandyBan) |
+| 💼 GitHub | [github.com/banhandy](https://github.com/banhandy) |
 
 ---
 
@@ -304,8 +344,9 @@ automation.
 
 MIT — free to study, reference, and build upon.
 
-Archived academic project. Preserved as a historical record
-of neural network-based computer vision work from 2007.
+This is an archived academic project, preserved as a historical
+record of neural network-based computer vision work from 2007.
+Not intended as production software.
 
 ---
 
